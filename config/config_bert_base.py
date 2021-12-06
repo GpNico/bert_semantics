@@ -1,0 +1,4 @@
+
+PRE_TRAINED_MODEL_NAME = 'bert-base-uncased'
+MAX_LEN = 64
+BATCH_SIZE = 1

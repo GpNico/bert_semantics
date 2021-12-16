@@ -3,7 +3,13 @@ import numpy as np
 import pickle
 import tqdm
 
-from prompts.prompt_material import DETS_LIST, STRUCTS_PREFIX_LIST, STRUCTS_MIDDLE_LIST, STRUCTS_SUFFIX_LIST, TRANSFORMATIONS
+from prompts.prompt_material import DETS_LIST, CONTENT_STRUCTS_PREFIX_LIST, CONTENT_STRUCTS_MIDDLE_LIST, CONTENT_STRUCTS_SUFFIX_LIST, TRANSFORMATIONS, LOGICAL_PREFIXES_LIST, LOGICAL_STRUCTS_LW_LIST
+
+#######################################
+#                                     #
+#               CONTENT               #
+#                                     #
+#######################################
 
 
 class PromptSelector:
@@ -11,9 +17,9 @@ class PromptSelector:
     def __init__(self, dict_of_prompts, dataset_name = ''):
         # Load prompts materials
         self.dets_list = DETS_LIST
-        self.structs_dict = {'prefix': STRUCTS_PREFIX_LIST,
-                             'middle': STRUCTS_MIDDLE_LIST,
-                             'suffix': STRUCTS_SUFFIX_LIST}
+        self.structs_dict = {'prefix': CONTENT_STRUCTS_PREFIX_LIST,
+                             'middle': CONTENT_STRUCTS_MIDDLE_LIST,
+                             'suffix': CONTENT_STRUCTS_SUFFIX_LIST}
 
         # Load transformations names
         self.transformations_names = TRANSFORMATIONS
@@ -26,7 +32,7 @@ class PromptSelector:
         self._compute_det_keys()
 
         # To save
-        self.filename = 'prompts\\best\\best_prompts_{}'.format(dataset_name)
+        self.filename = 'prompts\\best\\content_best_prompts_{}'.format(dataset_name)
 
     def load_scores(self, filename):
         savefile = open(filename, 'rb')
@@ -167,3 +173,83 @@ class PromptSelector:
 
         
         
+#######################################
+#                                     #
+#                LOGICAL              #
+#                                     #
+#######################################
+
+class LogicalPromptSelector:
+
+    def __init__(self, dict_of_prompts, dataset_name = ''):
+        # Load prompts materials
+        self.dets_list = DETS_LIST
+        self.structs_dict = {'prefixes': LOGICAL_PREFIXES_LIST,
+                             'struct_lw': LOGICAL_STRUCTS_LW_LIST}
+
+
+        # Get the dict of prompts from PromptScorer
+        self.dict_of_prompts = dict_of_prompts
+
+        # To save
+        self.filename = 'prompts\\best\\logical_best_prompts_{}'.format(dataset_name)
+
+    def load_scores(self, filename):
+        savefile = open(filename, 'rb')
+        self.all_pairs_scores_dict = pickle.load(savefile)
+        savefile.close()
+
+    def compute_best_prompts(self, filename, logical_words):
+        """
+            returns : dict -> key "HYPONYM---NOUN"
+                              value dict -> [[S*(lw), S*_reverse(lw)] for lw in logical_words]
+        """
+        self.load_scores(filename)
+
+        list_of_pairs = list(self.all_pairs_scores_dict.keys())
+
+        best_prompts = {}
+        for pair in tqdm.tqdm(list_of_pairs, total = len(list_of_pairs)):
+            pair_best_prompts = []
+            scores_dict = self.all_pairs_scores_dict[pair]
+
+            scores = np.array(list(scores_dict.values()))
+            keys = list(scores_dict.keys())
+
+            for idx in range(len(logical_words)):
+                lw_scores = scores[:,:, idx]
+
+                best_idx  = self._compute_best_prompt_lw(lw_scores)
+                best_key = keys[best_idx]
+
+                S_opt = self.dict_of_prompts[best_key]
+                
+                pair_best_prompts.append(S_opt)
+            best_prompts[pair] = pair_best_prompts
+
+            # Save prompts
+            savefile = open(self.filename, 'wb')
+            pickle.dump(best_prompts, savefile)
+            savefile.close()
+
+
+
+    def _compute_best_prompt_lw(self, lw_scores):
+        """
+            Compute the best prompt for each transformations =/= vanilla according to :
+            PREFIXES*, STRUCT_LW*, DET1*, DET2* = argmax_{PREFIXES, STRUCT_LW, DET1, DET2}(
+                                     P(MASK=therefore|S(PREFIXES, STRUCT_LW, DET1, DET2)) 
+                                            x 
+                                     P(MASK=therefore|S_reverse(PREFIXES, STRUCT_LW, DET1, DET2)
+                                    )
+
+
+            Returns : best_key
+        """
+        # By the way lw_scores has been calculated we just need to compute :
+        final_scores = lw_scores.prod(axis = 1)
+
+        # Best scores
+        best_idx = np.argmax(final_scores)
+
+        return best_idx

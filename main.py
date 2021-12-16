@@ -11,9 +11,11 @@ import os
 
 from data.data_loader import load_dataset
 from models.bert_multi_tokens import MultiTokensBERT
-from prompts.prompt_scorer import PromptScorer
-from prompts.prompt_selector import PromptSelector
+from prompts.prompt_scorer import ContentPromptScorer, LogicalPromptScorer
+from prompts.prompt_selector import PromptSelector, LogicalPromptSelector
 from content.content_scorer import ContentScorer
+from logical.logical_scorer import LogicalScorer
+from plot.plotter import Plotter
 
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -25,8 +27,26 @@ print("We found the following device : {}".format(device))
 if __name__ == '__main__':
 
     # To be changed
+    parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter, allow_abbrev=False)
+    parser.add_argument('-d',
+                        '--dataset',
+                        type=str,
+                        default='',
+                        dest='dataset',
+                        help='Name of the dataset used to evaluate BERT knowledge. Choices : custom, wordnet, trex.')
+    parser.add_argument("--prompt_scores", 
+                        help="Do we compute prompt scores",
+                        action="store_true")
+    parser.add_argument("--content", 
+                        help="Compute everything for the content words.",
+                        action="store_true")
+    parser.add_argument("--logical", 
+                        help="Compute everything for the logical words.",
+                        action="store_true")
+    args = parser.parse_args()
+    
     pre_trained_model_name = 'bert-base-uncased'
-    dataset_name = 'wordnet'
+    dataset_name = args.dataset
 
     # Tokenizer
     tokenizer = BertTokenizer.from_pretrained(pre_trained_model_name)
@@ -39,29 +59,66 @@ if __name__ == '__main__':
     # Create model
     model = MultiTokensBERT(pre_trained_model_name, device)
 
-    # PromptScorer
-    print("Computing prompts scores...")
-    prompt_scorer = PromptScorer(model = model, tokenizer = tokenizer, device = device, dataset_name = dataset_name)
-    if os.path.exists(prompt_scorer.filename):
-        print("Prompts scores already computed!")
-    else:
-        prompt_scorer.compute_all_pairs_scores(list_of_pairs)
-
-    # PromptSelector
-    print("Selecting best prompts...")
-    prompt_selector = PromptSelector(dict_of_prompts = prompt_scorer.dict_of_prompts, dataset_name = dataset_name)
-    if os.path.exists(prompt_selector.filename):
-        print("Best Prompts already computed!")
-    else:
-        prompt_selector.compute_best_prompts(prompt_scorer.filename)
-
-    # Computing Content Scores
-    print("Computing content scores...")
     content_scorer = ContentScorer(model = model, tokenizer = tokenizer, device = device, dataset_name = dataset_name)
-    if os.path.exists(content_scorer.filename):
-        print("Content scores already computed!")
+    logical_scorer = LogicalScorer(model = model, tokenizer = tokenizer, device = device, dataset_name = dataset_name)
+
+    plotter = Plotter(content_filename=content_scorer.filename,
+                      logical_filename=logical_scorer.filename,
+                      n = 5000,
+                      dataset=args.dataset)
+
+    if args.content:
+        # PromptScorer
+        print("Computing prompts scores...")
+        content_prompt_scorer = ContentPromptScorer(model = model, tokenizer = tokenizer, device = device, dataset_name = dataset_name)
+        if args.prompt_scores:
+            content_prompt_scorer.compute_all_pairs_scores(list_of_pairs)
+
+        # PromptSelector
+        print("Selecting best prompts...")
+        content_prompt_selector = PromptSelector(dict_of_prompts = content_prompt_scorer.dict_of_prompts, dataset_name = dataset_name)
+        if os.path.exists(content_prompt_selector.filename):
+            print("Best Prompts already computed!")
+        else:
+            content_prompt_selector.compute_best_prompts(content_prompt_scorer.filename)
+
+        # Computing Content Scores
+        print("Computing content scores...")
+        if os.path.exists(content_scorer.filename):
+            print("Content scores already computed!")
+        else:
+            content_scorer.compute_content_scores(list_of_pairs)
+
+        # Plotting results
+        plotter.content_plot()
+    elif args.logical:
+        # List of logical words
+        logical_words = ['therefore', 'consequently', 'then', 'accordingly', 'thence', 'so', 'hence', 'thus', 'because', 'since', 'for', 'seeing', 'considering']
+
+        # PromptScorer
+        print("Computing prompts scores...")
+        logical_prompt_scorer = LogicalPromptScorer(model = model, tokenizer = tokenizer, device = device, dataset_name = dataset_name)
+        if args.prompt_scores:
+            logical_prompt_scorer.compute_all_pairs_scores(logical_words, list_of_pairs)
+        
+        # PromptSelector
+        print("Selecting best prompts...")
+        logical_prompt_selector = LogicalPromptSelector(dict_of_prompts = logical_prompt_scorer.dict_of_prompts, dataset_name = dataset_name)
+        if os.path.exists(logical_prompt_selector.filename):
+            print("Best Prompts already computed!")
+        else:
+            logical_prompt_selector.compute_best_prompts(logical_prompt_scorer.filename, logical_words)
+        # Computing Logical Scores
+        print("Computing logical scores...")
+        if os.path.exists(logical_scorer.filename):
+            print("Logical scores already computed!")
+        else:
+            logical_scorer.compute_logical_scores(logical_words, list_of_pairs)
+
+        # Plotting results
+        plotter.logical_plot()
     else:
-        content_scorer.compute_content_scores(list_of_pairs)
+        raise Exception('Select CONTENT or LOGICAL')
 
     # TEMP
     #savefile = open(content_scorer.filename, 'rb')

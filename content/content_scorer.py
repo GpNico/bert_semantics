@@ -3,6 +3,8 @@ import numpy as np
 import pickle
 import tqdm
 
+import torch
+
 from prompts.prompt_material import TRANSFORMATIONS
 
 
@@ -20,7 +22,7 @@ class ContentScorer:
         # To save
         self.filename = 'content\\scores\\content_scores_{}'.format(dataset_name)
         # To load
-        self.prompts_filename = 'prompts\\best\\best_prompts_{}'.format(dataset_name)
+        self.prompts_filename = 'prompts\\best\\content_best_prompts_{}'.format(dataset_name)
 
     def load_best_prompts(self, filename):
         savefile = open(filename, 'rb')
@@ -78,8 +80,6 @@ class ContentScorer:
 
         # Compute input_ids and attention_mask of the sentence
         encoding = self.tokenizer(sentence,
-                     max_length=64, 
-                     padding='max_length',
                      return_tensors='pt'
                      )
         input_ids = encoding['input_ids'].to(self.device)
@@ -89,7 +89,8 @@ class ContentScorer:
         masks_to_predict_pos = self.find_all_masks_pos(input_ids)
 
         # Compute the probabilities and ranks from the model
-        probs_n_ranks = self.model.compute_greedy(input_ids, attention_mask, masks_to_predict_pos, masked_token_ids)
+        with torch.no_grad():
+            probs_n_ranks = self.model.compute_greedy(input_ids, attention_mask, masks_to_predict_pos, masked_token_ids)
 
         # Compute scores
         score = probs_n_ranks[:,0].prod()

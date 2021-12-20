@@ -15,6 +15,7 @@ from prompts.prompt_scorer import ContentPromptScorer, LogicalPromptScorer
 from prompts.prompt_selector import PromptSelector, LogicalPromptSelector
 from content.content_scorer import ContentScorer
 from logical.logical_scorer import LogicalScorer
+from filtrator.filtrator import ElFiltrator
 from plot.plotter import Plotter
 
 
@@ -34,6 +35,12 @@ if __name__ == '__main__':
                         default='',
                         dest='dataset',
                         help='Name of the dataset used to evaluate BERT knowledge. Choices : custom, wordnet, trex.')
+    parser.add_argument('-f',
+                        '--filtration',
+                        type=str,
+                        default='',
+                        dest='filtration_type',
+                        help='Chose the type of filtration you want to apply : model_freq or word_freq.')
     parser.add_argument("--prompt_scores", 
                         help="Do we compute prompt scores",
                         action="store_true")
@@ -47,6 +54,7 @@ if __name__ == '__main__':
     
     pre_trained_model_name = 'bert-base-uncased'
     dataset_name = args.dataset
+    filtration_type = args.filtration_type
 
     # Tokenizer
     tokenizer = BertTokenizer.from_pretrained(pre_trained_model_name)
@@ -62,10 +70,12 @@ if __name__ == '__main__':
     content_scorer = ContentScorer(model = model, tokenizer = tokenizer, device = device, dataset_name = dataset_name)
     logical_scorer = LogicalScorer(model = model, tokenizer = tokenizer, device = device, dataset_name = dataset_name)
 
-    plotter = Plotter(content_filename=content_scorer.filename,
-                      logical_filename=logical_scorer.filename,
+    el_filtrator = ElFiltrator(dataset_name = dataset_name, filtration_type = filtration_type)
+
+    plotter = Plotter(content_filename = el_filtrator.filename,
+                      logical_filename = el_filtrator.logical_filename,
                       n = 5000,
-                      dataset=args.dataset)
+                      dataset = dataset_name)
 
     if args.content:
         # PromptScorer
@@ -88,6 +98,13 @@ if __name__ == '__main__':
             print("Content scores already computed!")
         else:
             content_scorer.compute_content_scores(list_of_pairs)
+
+        # Filtrate
+        print("Filtering pairs according to {}...".format(filtration_type))
+        if os.path.exists(el_filtrator.filename):
+            print("Content scores already filtered!")
+        else:
+            el_filtrator.filtrate()
 
         # Plotting results
         plotter.content_plot()
@@ -114,6 +131,13 @@ if __name__ == '__main__':
             print("Logical scores already computed!")
         else:
             logical_scorer.compute_logical_scores(logical_words, list_of_pairs)
+
+        # Filtrate
+        print("Filtering pairs according to {}...".format(filtration_type))
+        if os.path.exists(el_filtrator.logical_filename):
+            print("Logical scores already filtered!")
+        else:
+            el_filtrator.filtrate_logical()
 
         # Plotting results
         plotter.logical_plot()

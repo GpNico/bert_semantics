@@ -33,6 +33,7 @@ class PromptSelector:
 
         # To save
         self.filename = 'prompts\\best\\content_best_prompts_{}'.format(dataset_name)
+        self.keys_filename = 'prompts\\best\\content_best_keys_{}'.format(dataset_name)
 
     def load_scores(self, filename):
         savefile = open(filename, 'rb')
@@ -85,8 +86,10 @@ class PromptSelector:
         list_of_pairs = list(self.all_pairs_scores_dict.keys())
 
         best_prompts = {}
+        best_keys = {}
         for pair in tqdm.tqdm(list_of_pairs, total = len(list_of_pairs)):
             pair_best_prompts = {}
+            pair_best_keys = {}
             scores_dict = self.all_pairs_scores_dict[pair]
             for transf in self.transformations_names:
                 if transf == 'vanilla':
@@ -99,11 +102,17 @@ class PromptSelector:
                 S_opt_phi = self.dict_of_prompts[transf_best_key]
                 
                 pair_best_prompts[transf] = [S_opt, S_opt_phi]
+                pair_best_keys[transf] = [vanilla_best_key, transf_best_key]
             best_prompts[pair] = pair_best_prompts
+            best_keys[pair] = pair_best_keys
 
-            # Save prompts
+            # Save prompts and keys
             savefile = open(self.filename, 'wb')
             pickle.dump(best_prompts, savefile)
+            savefile.close()
+
+            savefile = open(self.keys_filename, 'wb')
+            pickle.dump(best_keys, savefile)
             savefile.close()
 
 

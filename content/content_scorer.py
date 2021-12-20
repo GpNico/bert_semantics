@@ -23,10 +23,22 @@ class ContentScorer:
         self.filename = 'content\\scores\\content_scores_{}'.format(dataset_name)
         # To load
         self.prompts_filename = 'prompts\\best\\content_best_prompts_{}'.format(dataset_name)
+        self.keys_filename = 'prompts\\best\\content_best_keys_{}'.format(dataset_name)
+        self.prompts_scores_filename = 'prompts\\scores\\content_prompts_scores_{}'.format(dataset_name)
 
     def load_best_prompts(self, filename):
         savefile = open(filename, 'rb')
         self.best_prompts_dict = pickle.load(savefile)
+        savefile.close()
+
+    def load_best_keys(self, filename):
+        savefile = open(filename, 'rb')
+        self.best_keys_dict = pickle.load(savefile)
+        savefile.close()
+
+    def load_prompts_scores(self, filename):
+        savefile = open(filename, 'rb')
+        self.prompts_scores_dict = pickle.load(savefile)
         savefile.close()
 
     def compute_content_scores(self, list_of_pairs):
@@ -38,6 +50,8 @@ class ContentScorer:
         """
         # Load prompts
         self.load_best_prompts(self.prompts_filename)
+        self.load_best_keys(self.keys_filename)
+        self.load_prompts_scores(self.prompts_scores_filename)
 
         #Compute scores
         dict_of_scores = {}
@@ -69,6 +83,9 @@ class ContentScorer:
                 final_score = np.log(score / score_phi)
                 # Save it
                 dict_of_transf_scores[transf] = final_score
+            #f-corrected
+            dict_of_transf_scores['reverse-f-corrected'] = dict_of_transf_scores['reverse'] + self._compute_f_corrected(word1 + '---' + word2)
+            # Populate the dict
             dict_of_scores[word1 + '---' + word2] = dict_of_transf_scores
 
         # Save scores
@@ -96,6 +113,16 @@ class ContentScorer:
         score = probs_n_ranks[:,0].prod()
 
         return score
+
+    def _compute_f_corrected(self, pair):
+        vanilla_best_key, reverse_best_key = self.best_keys_dict[pair]['reverse']
+        vanilla_scores = self.prompts_scores_dict[pair]['vanilla'][vanilla_best_key]
+        reverse_scores = self.prompts_scores_dict[pair]['reverse'][reverse_best_key]
+        
+        rev_freq = [vanilla_scores[1], reverse_scores[0]]
+
+        return np.log(rev_freq[1]/rev_freq[0])
+
 
 
     def find_all_masks_pos(self, ids_seq):
